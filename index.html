@@ -1,0 +1,545 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<meta name="theme-color" content="#2457c5">
+<title>Echo Pre-Run Check</title>
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --ink: #1c2330; --muted: #5d6676; --line: #dde1e7;
+  --pass: #1f8a4c; --pass-bg: #e3f4ea; --warn: #a86300; --warn-bg: #fdf0d9;
+  --fail: #c2321f; --fail-bg: #fbe4e0; --empty: #eef0f3; --unused: #c9ced6; --accent: #2457c5;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+main { max-width: 1100px; margin: 0 auto; padding-block: 20px 60px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.example { background: var(--warn-bg); color: var(--ink); border: 1px solid var(--warn); border-radius: 8px; padding: 8px 12px; font-size: 13px; margin-bottom: 12px; }
+#copyBox { width: 100%; min-height: 120px; font: 12px/1.4 ui-monospace, Menlo, Consolas, monospace; margin-top: 10px; background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 8px; }
+h1 { font-size: 22px; margin: 0 0 2px; }
+h2 { font-size: 17px; margin: 0 0 10px; }
+.sub { color: var(--muted); margin: 0 0 18px; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+.drops { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 700px) { .drops { grid-template-columns: 1fr; } }
+.drop { border: 2px dashed var(--line); border-radius: 10px; padding: 18px; text-align: center; cursor: pointer; background: var(--bg); transition: border-color .15s, background .15s; }
+.drop.over { border-color: var(--accent); background: #e8eefb; }
+.drop strong { display: block; font-size: 16px; }
+.drop .hint { color: var(--muted); font-size: 13px; }
+.drop ul { list-style: none; padding: 0; margin: 8px 0 0; font-size: 13px; text-align: left; }
+.drop li { padding: 2px 0; word-break: break-all; }
+.drop li.err { color: var(--fail); }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 12px; }
+button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button:disabled { opacity: .5; cursor: default; }
+details summary { cursor: pointer; font-weight: 600; }
+.settings { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-top: 12px; }
+.settings label { display: block; font-size: 13px; color: var(--muted); }
+.settings input { width: 100%; font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; margin-top: 3px; background: var(--panel); color: var(--ink); }
+.verdict { border-radius: 10px; padding: 18px; margin-bottom: 16px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+.verdict .big { font-size: 30px; font-weight: 800; letter-spacing: .5px; }
+.verdict.go { background: var(--pass-bg); color: var(--pass); border: 1px solid var(--pass); }
+.verdict.caution { background: var(--warn-bg); color: var(--warn); border: 1px solid var(--warn); }
+.verdict.nogo { background: var(--fail-bg); color: var(--fail); border: 1px solid var(--fail); }
+.verdict .detail { color: var(--ink); }
+.stats { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
+.stat { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-size: 13px; color: var(--muted); }
+.stat b { color: var(--ink); font-size: 16px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 12px; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); }
+td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tablewrap { overflow-x: auto; }
+.tag { display: inline-block; padding: 1px 8px; border-radius: 99px; font-size: 12px; font-weight: 700; }
+.tag.FAIL { background: var(--fail-bg); color: var(--fail); }
+.tag.WARN { background: var(--warn-bg); color: var(--warn); }
+.tag.PASS { background: var(--pass-bg); color: var(--pass); }
+.plate { margin-top: 14px; }
+.plate h3 { font-size: 15px; margin: 0 0 6px; }
+.grid { display: grid; grid-template-columns: 22px repeat(24, minmax(0, 1fr)); gap: 2px; font-size: 10px; max-width: 900px; }
+.grid .lbl { color: var(--muted); text-align: center; align-self: center; }
+.well { aspect-ratio: 1; border-radius: 50%; background: var(--empty); position: relative; }
+.well.unused { background: var(--unused); opacity: .45; }
+.well.PASS { background: var(--pass); }
+.well.WARN { background: #e09a2b; }
+.well.FAIL { background: var(--fail); }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-top: 8px; }
+.legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; background: var(--c); }
+.muted { color: var(--muted); }
+.notes { font-size: 13px; color: var(--muted); }
+.notes li { margin: 3px 0; }
+#tip { position: fixed; pointer-events: none; background: var(--ink); color: var(--panel); font-size: 12px; padding: 6px 8px; border-radius: 6px; display: none; max-width: 280px; z-index: 10; }
+@media print { .noprint { display: none !important; } body { background: #fff; } .panel { border: none; padding: 0; } }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12161d; --panel: #1b212b; --ink: #e6e9ee; --muted: #9aa3b2; --line: #2e3643;
+    --pass: #4cc282; --pass-bg: #163325; --warn: #f0b04f; --warn-bg: #3a2b12; --fail: #f07462; --fail-bg: #3d1c17;
+    --empty: #262d38; --unused: #4a5363; --accent: #6b93ec; color-scheme: dark;
+  }
+  :root:not([data-theme="light"]) .drop.over { background: #1d2a45; }
+}
+:root[data-theme="dark"] {
+  --bg: #12161d; --panel: #1b212b; --ink: #e6e9ee; --muted: #9aa3b2; --line: #2e3643;
+  --pass: #4cc282; --pass-bg: #163325; --warn: #f0b04f; --warn-bg: #3a2b12; --fail: #f07462; --fail-bg: #3d1c17;
+  --empty: #262d38; --unused: #4a5363; --accent: #6b93ec; color-scheme: dark;
+}
+</style>
+</head>
+<body>
+<main>
+  <h1>Echo 525 Pre-Run Check</h1>
+  <p class="sub">Check source-well volumes against the worklist <em>before</em> you start the run. Everything runs in this browser and nothing is uploaded.</p>
+
+  <section class="panel noprint">
+    <div class="drops">
+      <div class="drop" id="dropSurvey" tabindex="0">
+        <strong>1. Survey report(s)</strong>
+        <span class="hint">Drop <code>E5XX-…_Survey_….xml</code> here or click to choose. One per source plate.</span>
+        <ul id="listSurvey"></ul>
+        <input type="file" id="fileSurvey" accept=".xml,.csv,.txt" multiple hidden>
+      </div>
+      <div class="drop" id="dropWorklist" tabindex="0">
+        <strong>2. Worklist / pick list</strong>
+        <span class="hint">Drop the <code>WL_echo_….csv</code> you're about to run</span>
+        <ul id="listWorklist"></ul>
+        <input type="file" id="fileWorklist" accept=".csv,.txt" multiple hidden>
+      </div>
+    </div>
+    <div class="row">
+      <button class="primary" id="btnCheck" disabled>Check run</button>
+      <button id="btnClear">Clear files</button>
+      <span class="muted" id="status"></span>
+    </div>
+    <details style="margin-top:14px">
+      <summary>Limits</summary>
+      <div class="settings">
+        <label>Minimum safe volume (µL)
+          <input type="number" step="0.5" id="setMin"></label>
+        <label>Maximum safe volume (µL)
+          <input type="number" step="0.5" id="setMax"></label>
+        <label>Warning margin (µL)
+          <input type="number" step="0.5" id="setMargin"></label>
+        <label>Droplet size (nL)
+          <input type="number" step="0.5" id="setDroplet"></label>
+      </div>
+      <p class="notes">The defaults come from the Sept 2026 baseline: only 10 of 306 volume-related failures happened between 20 and 65 µL. A well fails if it starts outside that range or would drop below the minimum during the run. It gets a warning if it ends up within the margin of either limit. Use the MSA bias result to set the margin. Your settings are saved in this browser.</p>
+      <button id="btnReset">Reset to defaults</button>
+    </details>
+  </section>
+
+  <section id="results" hidden>
+    <div class="example" id="exampleNote" hidden>Example: a replay of the real LAB2583_AMP run from 9/30. The Echo threw exceptions at A11 and A14 on that run. Drop your own survey and worklist files above to replace it.</div>
+    <div class="verdict" id="verdict"></div>
+    <div class="panel" id="issuesPanel">
+      <div class="row" style="margin-top:0; justify-content:space-between">
+        <h2 style="margin:0">Wells to fix before the run</h2>
+        <span class="noprint">
+          <button id="btnExport">Copy fix list</button>
+          <button id="btnDownload">Download CSV</button>
+          <button id="btnPrint">Print</button>
+        </span>
+      </div>
+      <textarea id="copyBox" hidden readonly aria-label="Fix list as CSV"></textarea>
+      <div class="tablewrap"><table id="issues"></table></div>
+    </div>
+    <div class="panel">
+      <h2>Source plate maps</h2>
+      <div class="muted" style="font-size:13px">Each dot shows the well's projected volume at the end of the run. Hover over a well for details.</div>
+      <div class="legend">
+        <span style="--c:var(--pass)">OK</span><span style="--c:#e09a2b">Warning</span>
+        <span style="--c:var(--fail)">Fix</span><span style="--c:var(--unused)">Surveyed, not used</span>
+        <span style="--c:var(--empty)">Not in survey</span>
+      </div>
+      <div id="plates"></div>
+    </div>
+  </section>
+</main>
+<div id="tip"></div>
+
+<script>
+"use strict";
+const DEFAULTS = { min: 20, max: 65, margin: 3, droplet: 25 };
+const STORE_KEY = "echoPreflightSettings.v1";
+const state = { surveys: [], worklists: [], result: null };
+
+// ---------- settings ----------
+function loadSettings() {
+  try { return Object.assign({}, DEFAULTS, JSON.parse(localStorage.getItem(STORE_KEY) || "{}")); }
+  catch (e) { return Object.assign({}, DEFAULTS); }
+}
+function saveSettings(s) { try { localStorage.setItem(STORE_KEY, JSON.stringify(s)); } catch (e) {} }
+function readSettingsForm() {
+  const n = id => parseFloat(document.getElementById(id).value);
+  const s = { min: n("setMin"), max: n("setMax"), margin: n("setMargin"), droplet: n("setDroplet") };
+  for (const k in s) if (!isFinite(s[k])) s[k] = DEFAULTS[k];
+  return s;
+}
+function fillSettingsForm(s) {
+  document.getElementById("setMin").value = s.min;
+  document.getElementById("setMax").value = s.max;
+  document.getElementById("setMargin").value = s.margin;
+  document.getElementById("setDroplet").value = s.droplet;
+}
+
+// ---------- parsing ----------
+const norm = s => String(s == null ? "" : s).trim();
+const key = (plate, well) => norm(plate).toUpperCase() + "|" + normWell(well);
+function normWell(w) {
+  const m = norm(w).toUpperCase().match(/^([A-P])0*([0-9]{1,2})$/);
+  return m ? m[1] + Number(m[2]) : norm(w).toUpperCase();
+}
+function validWell384(w) {
+  const m = normWell(w).match(/^([A-P])([0-9]+)$/);
+  return !!m && +m[2] >= 1 && +m[2] <= 24;
+}
+
+function parseCSV(text) {
+  const rows = []; let row = [], cur = "", q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) {
+      if (c === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; }
+      else cur += c;
+    } else if (c === '"') q = true;
+    else if (c === ",") { row.push(cur); cur = ""; }
+    else if (c === "\n" || c === "\r") {
+      if (c === "\r" && text[i + 1] === "\n") i++;
+      row.push(cur); rows.push(row); row = []; cur = "";
+    } else cur += c;
+  }
+  if (cur !== "" || row.length) { row.push(cur); rows.push(row); }
+  return rows;
+}
+
+// Find a header row containing the needed columns (Echo reports have preamble lines).
+function findHeader(rows, required) {
+  for (let i = 0; i < Math.min(rows.length, 60); i++) {
+    const h = rows[i].map(c => norm(c).toLowerCase());
+    if (required.every(r => h.includes(r))) return { index: i, cols: h };
+  }
+  return null;
+}
+
+function parseSurveyXML(text, fileName) {
+  const doc = new DOMParser().parseFromString(text, "application/xml");
+  if (doc.getElementsByTagName("parsererror").length) throw new Error("not valid XML");
+  const recs = Array.from(doc.getElementsByTagName("record"));
+  if (!recs.length) throw new Error("no <record> rows; is this a survey report?");
+  const get = (r, tag) => { const e = r.getElementsByTagName(tag)[0]; return e ? norm(e.textContent) : ""; };
+  const runId = norm((doc.getElementsByTagName("RunID")[0] || {}).textContent);
+  const runTime = norm((doc.getElementsByTagName("RunDateTime")[0] || {}).textContent);
+  const wells = recs.map(r => ({
+    plate: get(r, "SrcPlateName"), plateType: get(r, "SrcPlateType"), well: normWell(get(r, "SrcWell")),
+    volume: parseFloat(get(r, "SurveyFluidVolume")), status: get(r, "SurveyStatus"),
+  })).filter(w => w.well);
+  if (!wells.some(w => isFinite(w.volume))) throw new Error("no Survey Fluid Volume values found");
+  return { fileName, runId, runTime, wells };
+}
+
+function parseSurveyCSV(text, fileName) {
+  const rows = parseCSV(text);
+  const h = findHeader(rows, ["source well", "survey fluid volume"]);
+  if (!h) throw new Error("no 'Source Well' + 'Survey Fluid Volume' columns");
+  const c = n => h.cols.indexOf(n);
+  const wells = [];
+  for (const r of rows.slice(h.index + 1)) {
+    if (!r[c("source well")]) { if (wells.length) break; else continue; }
+    wells.push({
+      plate: norm(r[c("source plate name")]), plateType: norm(r[c("source plate type")]),
+      well: normWell(r[c("source well")]), volume: parseFloat(r[c("survey fluid volume")]),
+      status: norm(r[c("survey status")]),
+    });
+  }
+  return { fileName, runId: "", runTime: "", wells };
+}
+
+function parseWorklist(text, fileName) {
+  const rows = parseCSV(text);
+  const h = findHeader(rows, ["source well", "transfer volume"]);
+  if (!h) throw new Error("no 'Source Well' + 'Transfer Volume' columns");
+  const c = n => h.cols.indexOf(n);
+  const iPlate = c("source plate name"), iWell = c("source well"), iVol = c("transfer volume");
+  const iDP = c("destination plate name"), iDW = c("destination well");
+  const out = [];
+  rows.slice(h.index + 1).forEach((r, k) => {
+    if (r.every(x => norm(x) === "")) return;
+    out.push({
+      line: h.index + k + 2, file: fileName,
+      plate: iPlate >= 0 ? norm(r[iPlate]) : "", well: normWell(r[iWell]), rawWell: norm(r[iWell]),
+      nl: parseFloat(r[iVol]), rawVol: norm(r[iVol]),
+      dest: (iDP >= 0 ? norm(r[iDP]) : "") + (iDW >= 0 && norm(r[iDW]) ? " " + norm(r[iDW]) : ""),
+    });
+  });
+  return { fileName, rows: out };
+}
+
+// ---------- core check ----------
+function runCheck(surveys, worklists, s) {
+  const survey = new Map();
+  const surveyPlates = new Map(); // plate -> {type, file, runTime}
+  for (const sv of surveys) for (const w of sv.wells) {
+    survey.set(key(w.plate, w.well), w);
+    if (!surveyPlates.has(w.plate)) surveyPlates.set(w.plate, { type: w.plateType, file: sv.fileName, runTime: sv.runTime });
+  }
+  const singlePlate = surveyPlates.size === 1 ? [...surveyPlates.keys()][0] : null;
+
+  const rowIssues = [];
+  const draws = new Map(); // key -> {plate, well, nl, count}
+  let totalRows = 0, skippedZero = 0;
+  for (const wl of worklists) for (const r of wl.rows) {
+    totalRows++;
+    if (r.rawVol !== "" && isFinite(r.nl) && r.nl === 0) { skippedZero++; continue; } // Echo ignores 0-volume rows
+    const plate = r.plate || singlePlate || "";
+    const problems = [];
+    if (!validWell384(r.well)) problems.push(`Source well "${r.rawWell}" isn't a valid 384-well position`);
+    if (!isFinite(r.nl) || r.nl < 0) problems.push(`Transfer volume "${r.rawVol}" isn't a number`);
+    else if (s.droplet > 0 && Math.abs(r.nl / s.droplet - Math.round(r.nl / s.droplet)) > 1e-6)
+      problems.push(`${r.nl} nL isn't a multiple of ${s.droplet} nL; the Echo will round it`);
+    if (problems.length) {
+      const hard = problems.some(p => !p.includes("multiple of"));
+      rowIssues.push({ sev: hard ? "FAIL" : "WARN", plate, well: r.rawWell, where: `${r.file} line ${r.line}`, problem: problems.join("; "),
+        action: hard ? "Fix this worklist row" : "Check the volume is what you meant" });
+      if (hard) continue;
+    }
+    const k = key(plate, r.well);
+    const d = draws.get(k) || { plate, well: r.well, nl: 0, count: 0 };
+    d.nl += r.nl; d.count++; draws.set(k, d);
+  }
+
+  const wellResults = new Map();
+  const wellIssues = [];
+  for (const [k, d] of draws) {
+    const sv = survey.get(k);
+    const drawUL = d.nl / 1000;
+    if (!sv) {
+      const known = [...surveyPlates.keys()].some(p => p.toUpperCase() === d.plate.toUpperCase());
+      wellIssues.push({ sev: "FAIL", plate: d.plate, well: d.well, start: null, draw: drawUL, end: null, count: d.count,
+        problem: known ? "Well isn't in the survey (empty, or the survey didn't read it)" : `No survey loaded for plate "${d.plate}"`,
+        action: known ? "Fill the well and re-survey" : "Survey this plate and add the report" });
+      continue;
+    }
+    const start = sv.volume, end = start - drawUL;
+    const r = { plate: sv.plate, well: sv.well, start, draw: drawUL, end, count: d.count, sev: "PASS", problem: "", action: "" };
+    if (sv.status || !isFinite(start) || start <= 0) {
+      r.sev = "FAIL"; r.problem = sv.status ? `Survey: ${sv.status}` : "Survey read no fluid";
+      r.action = `Check the well, fill to ≥ ${fmt(s.min + s.margin + drawUL)} µL, and re-survey`;
+    } else if (start > s.max) {
+      r.sev = "FAIL"; r.problem = `Overfilled: ${fmt(start)} µL is above ${s.max} µL (fluid height out of range)`;
+      r.action = `Remove about ${fmt(start - (s.max - s.margin))} µL, then re-survey`;
+    } else if (start < s.min) {
+      r.sev = "FAIL"; r.problem = `Too low to start: ${fmt(start)} µL is below ${s.min} µL`;
+      r.action = topUp(start, drawUL, s);
+    } else if (end < s.min) {
+      r.sev = "FAIL"; r.problem = `Will run low: ends at ${fmt(end)} µL after drawing ${fmt(drawUL)} µL`;
+      r.action = topUp(start, drawUL, s);
+    } else if (end < s.min + s.margin || start > s.max - s.margin) {
+      r.sev = "WARN";
+      r.problem = end < s.min + s.margin ? `Close to the minimum: ends at ${fmt(end)} µL` : `Close to the maximum: starts at ${fmt(start)} µL`;
+      r.action = end < s.min + s.margin ? topUp(start, drawUL, s) : `Consider removing about ${fmt(start - (s.max - s.margin))} µL`;
+    }
+    wellResults.set(k, r);
+    if (r.sev !== "PASS") wellIssues.push(r);
+  }
+
+  // Plate type sanity: worklist plates that were surveyed under multiple types etc.
+  const plateIssues = [];
+  for (const [p, info] of surveyPlates) {
+    const used = [...draws.values()].some(d => d.plate.toUpperCase() === p.toUpperCase());
+    if (!used) plateIssues.push({ sev: "WARN", plate: p, well: "—", where: info.file,
+      problem: "Survey loaded but the worklist doesn't use this plate", action: "Check you loaded the right survey" });
+  }
+
+  const issues = [...wellIssues, ...rowIssues, ...plateIssues]
+    .sort((a, b) => sevRank(a.sev) - sevRank(b.sev) || a.plate.localeCompare(b.plate) || wellOrder(a.well) - wellOrder(b.well));
+  const fails = issues.filter(i => i.sev === "FAIL").length, warns = issues.filter(i => i.sev === "WARN").length;
+  const transfersAtRisk = [...wellIssues].filter(i => i.sev === "FAIL").reduce((n, i) => n + (i.count || 0), 0)
+    + rowIssues.filter(i => i.sev === "FAIL").length;
+  return { survey, surveyPlates, draws, wellResults, issues, fails, warns, totalRows, skippedZero,
+    transfers: totalRows - skippedZero, wellsUsed: draws.size, transfersAtRisk };
+}
+function topUp(start, drawUL, s) {
+  const target = Math.min(s.max - s.margin, s.min + s.margin + drawUL);
+  const add = target - start;
+  if (s.min + s.margin + drawUL > s.max - s.margin)
+    return `This well can't supply ${fmt(drawUL)} µL within limits. Split the draw across a second well`;
+  return `Add about ${fmt(Math.max(add, 0.5))} µL (to ~${fmt(target)} µL), then re-survey`;
+}
+const sevRank = s => ({ FAIL: 0, WARN: 1, PASS: 2 }[s]);
+function wellOrder(w) { const m = normWell(w).match(/^([A-P])([0-9]+)$/); return m ? (m[1].charCodeAt(0) - 65) * 24 + +m[2] : 9999; }
+const fmt = v => (v == null || !isFinite(v)) ? "—" : (Math.round(v * 10) / 10).toFixed(1);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+// ---------- rendering ----------
+function render(res, s) {
+  const v = document.getElementById("verdict");
+  const cls = res.fails ? "nogo" : res.warns ? "caution" : "go";
+  const word = res.fails ? "NO-GO" : res.warns ? "GO WITH CAUTION" : "GO";
+  const msg = res.fails
+    ? `${res.fails} item${res.fails > 1 ? "s" : ""} would likely cause exceptions (${res.transfersAtRisk} transfer${res.transfersAtRisk === 1 ? "" : "s"} at risk). Fix ${res.fails > 1 ? "them" : "it"}, then re-survey and check again.`
+    : res.warns ? `No predicted failures, but ${res.warns} well${res.warns > 1 ? "s are" : " is"} close to a limit.`
+    : "Every source well is in range for the whole run.";
+  v.className = "verdict " + cls;
+  v.innerHTML = `<div class="big">${word}</div><div><div class="detail">${esc(msg)}</div>
+    <div class="stats">
+      <div class="stat"><b>${res.transfers}</b> transfers</div>
+      <div class="stat"><b>${res.wellsUsed}</b> source wells used</div>
+      <div class="stat"><b>${res.surveyPlates.size}</b> plate${res.surveyPlates.size === 1 ? "" : "s"} surveyed</div>
+      <div class="stat">limits <b>${s.min}–${s.max}</b> µL ± ${s.margin}</div>
+      ${res.skippedZero ? `<div class="stat"><b>${res.skippedZero}</b> zero-volume rows ignored</div>` : ""}
+    </div></div>`;
+
+  const t = document.getElementById("issues");
+  document.getElementById("issuesPanel").hidden = !res.issues.length;
+  t.innerHTML = `<thead><tr><th></th><th>Plate</th><th>Well</th><th class="num">Survey µL</th><th class="num">Draw µL</th><th class="num">End µL</th><th>Problem</th><th>What to do</th></tr></thead><tbody>` +
+    res.issues.map(i => `<tr><td><span class="tag ${i.sev}">${i.sev === "FAIL" ? "FIX" : "WARN"}</span></td>
+      <td>${esc(i.plate || "—")}</td><td><b>${esc(i.well)}</b></td>
+      <td class="num">${fmt(i.start)}</td><td class="num">${fmt(i.draw)}</td><td class="num">${fmt(i.end)}</td>
+      <td>${esc(i.problem)}${i.where ? `<div class="muted" style="font-size:12px">${esc(i.where)}</div>` : ""}</td><td>${esc(i.action)}</td></tr>`).join("") + "</tbody>";
+
+  const host = document.getElementById("plates"); host.innerHTML = "";
+  const plates = new Set([...res.surveyPlates.keys(), ...[...res.draws.values()].map(d => d.plate)]);
+  for (const p of plates) {
+    const info = res.surveyPlates.get(p);
+    const div = document.createElement("div"); div.className = "plate";
+    let html = `<h3>${esc(p || "(no plate name)")} <span class="muted" style="font-weight:400">${esc(info ? info.type : "not surveyed")}${info && info.runTime ? " · surveyed " + esc(info.runTime) : ""}</span></h3><div class="grid"><div></div>`;
+    for (let c = 1; c <= 24; c++) html += `<div class="lbl">${c}</div>`;
+    for (let r = 0; r < 16; r++) {
+      const row = String.fromCharCode(65 + r);
+      html += `<div class="lbl">${row}</div>`;
+      for (let c = 1; c <= 24; c++) {
+        const k = key(p, row + c);
+        const wr = res.wellResults.get(k), sv = res.survey.get(k), d = res.draws.get(k);
+        let cls = "", tip = `${row}${c}`;
+        if (wr) { cls = wr.sev; tip += ` · ${fmt(wr.start)} → ${fmt(wr.end)} µL (${wr.count} transfer${wr.count > 1 ? "s" : ""}, ${fmt(wr.draw)} µL)` + (wr.problem ? ` · ${wr.problem}` : ""); }
+        else if (d) { cls = "FAIL"; tip += " · used by worklist but not in the survey"; }
+        else if (sv) { cls = "unused"; tip += ` · ${fmt(sv.volume)} µL · not used by this worklist`; }
+        else tip += " · not in survey";
+        html += `<div class="well ${cls}" data-tip="${esc(tip)}"></div>`;
+      }
+    }
+    div.innerHTML = html + "</div>";
+    host.appendChild(div);
+  }
+  document.getElementById("results").hidden = false;
+}
+
+function fixListCSV(res) {
+  const head = ["Status", "Plate", "Well", "Survey uL", "Draw uL", "End uL", "Transfers", "Problem", "Action"];
+  const q = v => /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v);
+  return [head.join(",")].concat(res.issues.map(i =>
+    [i.sev === "FAIL" ? "FIX" : "WARN", i.plate, i.well, fmt(i.start), fmt(i.draw), fmt(i.end), i.count || "", i.problem, i.action].map(q).join(","))).join("\n");
+}
+function copyFixList(res) {
+  const text = fixListCSV(res), box = document.getElementById("copyBox"), btn = document.getElementById("btnExport");
+  const fallback = () => { box.value = text; box.hidden = false; box.focus(); box.select(); btn.textContent = "Press Ctrl+C to copy"; };
+  try {
+    navigator.clipboard.writeText(text).then(() => { btn.textContent = "Copied"; setTimeout(() => btn.textContent = "Copy fix list", 1800); }, fallback);
+  } catch (e) { fallback(); }
+}
+
+// ---------- file handling ----------
+const readText = f => new Promise((ok, bad) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = () => bad(r.error); r.readAsText(f); });
+
+async function addFiles(kind, files) {
+  if (state.example) { state.example = false; state.surveys = []; state.worklists = []; }
+  for (const f of files) {
+    const entry = { name: f.name, error: null, data: null };
+    try {
+      const text = await readText(f);
+      if (kind === "survey") entry.data = /^\s*</.test(text) ? parseSurveyXML(text, f.name) : parseSurveyCSV(text, f.name);
+      else {
+        if (/^\s*</.test(text)) throw new Error("this looks like a survey XML; drop it on the left");
+        entry.data = parseWorklist(text, f.name);
+      }
+    } catch (e) { entry.error = e.message || String(e); }
+    const list = kind === "survey" ? state.surveys : state.worklists;
+    const i = list.findIndex(x => x.name === entry.name);
+    if (i >= 0) list[i] = entry; else list.push(entry);
+  }
+  refreshLists();
+  if (okSurveys().length && okWorklists().length) check();
+}
+const okSurveys = () => state.surveys.filter(x => x.data).map(x => x.data);
+const okWorklists = () => state.worklists.filter(x => x.data).map(x => x.data);
+
+function refreshLists() {
+  const li = (x, extra) => `<li class="${x.error ? "err" : ""}">${x.error ? "✗" : "✓"} ${esc(x.name)}${x.error ? " — " + esc(x.error) : extra(x.data)}</li>`;
+  document.getElementById("listSurvey").innerHTML = state.surveys.map(x => li(x, d => {
+    const plates = [...new Set(d.wells.map(w => w.plate))].join(", ");
+    return ` <span class="muted">· ${esc(plates)} · ${d.wells.length} wells</span>`;
+  })).join("");
+  document.getElementById("listWorklist").innerHTML = state.worklists.map(x => li(x, d => ` <span class="muted">· ${d.rows.length} rows</span>`)).join("");
+  document.getElementById("btnCheck").disabled = !(okSurveys().length && okWorklists().length);
+  document.getElementById("status").textContent = !okSurveys().length ? "Add a survey report." : !okWorklists().length ? "Add the worklist." : "";
+}
+
+function check() {
+  document.getElementById("exampleNote").hidden = !state.example;
+  document.getElementById("copyBox").hidden = true;
+  const s = readSettingsForm(); saveSettings(s);
+  state.result = runCheck(okSurveys(), okWorklists(), s);
+  render(state.result, s);
+}
+
+function wireDrop(zoneId, inputId, kind) {
+  const z = document.getElementById(zoneId), inp = document.getElementById(inputId);
+  z.addEventListener("click", () => inp.click());
+  z.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); inp.click(); } });
+  inp.addEventListener("change", () => { addFiles(kind, [...inp.files]); inp.value = ""; });
+  ["dragenter", "dragover"].forEach(ev => z.addEventListener(ev, e => { e.preventDefault(); z.classList.add("over"); }));
+  ["dragleave", "drop"].forEach(ev => z.addEventListener(ev, e => { e.preventDefault(); z.classList.remove("over"); }));
+  z.addEventListener("drop", e => addFiles(kind, [...e.dataTransfer.files]));
+}
+// Dropping a file outside a zone shouldn't navigate away from the page.
+window.addEventListener("dragover", e => e.preventDefault());
+window.addEventListener("drop", e => e.preventDefault());
+
+wireDrop("dropSurvey", "fileSurvey", "survey");
+wireDrop("dropWorklist", "fileWorklist", "worklist");
+fillSettingsForm(loadSettings());
+refreshLists();
+document.getElementById("btnCheck").onclick = check;
+document.getElementById("btnClear").onclick = () => { state.surveys = []; state.worklists = []; refreshLists(); document.getElementById("results").hidden = true; };
+document.getElementById("btnReset").onclick = () => { fillSettingsForm(DEFAULTS); saveSettings(DEFAULTS); if (state.result) check(); };
+["setMin", "setMax", "setMargin", "setDroplet"].forEach(id => document.getElementById(id).addEventListener("change", () => { if (state.result) check(); }));
+document.getElementById("btnDownload").onclick = () => {
+  if (!state.result) return;
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([fixListCSV(state.result).replace(/\n/g, "\r\n")], { type: "text/csv" }));
+  a.download = "echo_precheck_fixlist_" + ([...state.result.surveyPlates.keys()].join("_").replace(/[^\w-]+/g, "_").slice(0, 60) || "run") + ".csv";
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+};
+document.getElementById("btnPrint").onclick = () => window.print();
+document.getElementById("btnExport").onclick = () => state.result && copyFixList(state.result);
+
+const tip = document.getElementById("tip");
+document.addEventListener("mouseover", e => { const t = e.target.closest("[data-tip]"); if (!t) { tip.style.display = "none"; return; } tip.textContent = t.dataset.tip; tip.style.display = "block"; });
+document.addEventListener("mousemove", e => { if (tip.style.display === "block") { tip.style.left = Math.min(e.clientX + 12, innerWidth - 290) + "px"; tip.style.top = (e.clientY + 14) + "px"; } });
+
+// Example on first load: the real 9/30 LAB2583_AMP survey replayed against a 500 nL-per-well worklist.
+const EXAMPLE_SURVEY = "A1:38.454;C1:38.793;E1:40.505;G1:40.286;I1:39.669;K1:40.704;M1:39.848;O1:39.41;A3:46.696;C3:44.865;E3:46.338;G3:46.596;I3:46.019;K3:46.696;M3:45.94;O3:45.78;A5:47.134;C5:46.099;E5:45.94;G5:46.218;I5:45.462;K5:45.581;M5:45.78;O5:46.119;A7:47.851;C7:46.099;E7:46.238;G7:46.318;I7:45.9;K7:46.298;M7:45.78;O7:46.557;A9:47.214;C9:46.696;E9:46.596;G9:46.537;I9:46.019;K9:46.377;M9:46.596;O9:46.218;A11:0;C11:44.665;E11:46.895;G11:47.214;I11:46.099;K11:46.636;M11:45.721;O11:43.829;A13:45.84;C13:46.079;E13:47.034;G13:47.214;I13:43.929;K13:43.65;M13:46.198;O13:45.183;A15:45.303;C15:46.577;E15:46.238;G15:46.656;I15:45.88;K15:46.218;M15:46.099;O15:45.322;A17:47.592;C17:46.417;E17:45.86;G17:46.178;I17:45.76;K17:45.979;M17:46.019;O17:46.557;A19:46.696;C19:45.84;E19:46.178;G19:46.397;I19:45.521;K19:45.82;M19:45.621;O19:45.88;A21:46.577;C21:46.218;E21:45.999;G21:46.676;I21:45.303;K21:45.482;M21:45.84;O21:45.342;A23:46.915;C23:45.243;E23:45.88;G23:45.979;I23:45.502;K23:45.76;A2:47.194;C2:45.999;E2:46.397;G2:46.178;I2:45.84;K2:45.88;M2:45.8;O2:45.402;A4:47.054;C4:43.212;E4:46.059;G4:45.621;I4:46.119;K4:46.477;M4:46.218;O4:46.218;A6:47.114;C6:45.362;E6:45.203;G6:45.621;I6:44.845;K6:45.482;M6:45.123;O6:45.681;A8:47.592;C8:46.119;E8:46.039;G8:46.318;I8:45.959;K8:45.8;M8:46.159;O8:47.134;A10:46.218;C10:46.417;E10:46.756;G10:46.577;I10:45.979;K10:46.298;M10:46.537;O10:45.402;A12:45.661;C12:45.979;E12:47.074;G12:47.492;I12:46.139;K12:47.015;M12:46.656;O12:45.8;A14:0;C14:45.064;E14:47.452;G14:47.572;I14:46.159;K14:46.417;M14:46.477;O14:43.411;A16:46.815;C16:45.263;E16:45.482;G16:45.362;I16:43.949;K16:43.969;M16:44.705;O16:46.457;A18:48.627;C18:47.074;E18:46.198;G18:46.577";
+function loadExample() {
+  const plate = "LAB2583_AMP";
+  const wells = EXAMPLE_SURVEY.split(";").map(p => {
+    const [well, v] = p.split(":"), volume = +v;
+    return { plate, plateType: "384PP_AQ_SP", well, volume,
+      status: volume === 0 ? `Data missing for well (1th row, ${well.slice(1)}th column), defaulting to 0.0 value of AQ` : "" };
+  });
+  const rows = wells.map((w, i) => ({ line: i + 2, file: "example worklist", plate, well: w.well, rawWell: w.well, nl: 500, rawVol: "500", dest: "LAB2583_CONC " + w.well }));
+  state.surveys = [{ name: "Example: E5XX-19064_Survey_LAB2583_AMP.xml", error: null, data: { fileName: "example survey", runId: "1790781941", runTime: "2026-09-30 11:25:10", wells } }];
+  state.worklists = [{ name: "Example: LAB-2583 - 16b_WL_echo_conc_xfer.csv", error: null, data: { fileName: "example worklist", rows } }];
+  state.example = true;
+  refreshLists(); check();
+}
+loadExample();
+
+window.__echoPreflight = { addFiles, runCheck, state }; // for testing
+</script>
+<script>
+if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("sw.js").catch(() => {});
+</script>
+</body>
+</html>
